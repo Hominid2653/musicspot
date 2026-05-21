@@ -1,79 +1,761 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Music Poster Studio</title>
-    <!-- Tailwind CSS -->
-    <script src="https://jsdelivr.net"></script>
-    <!-- External Graphic Libraries -->
-    <script src="https://cloudflare.com"></script>
-    <script src="https://cloudflare.com"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spotify Poster Generator</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Bebas Neue (display) + IBM Plex Mono (body/mono) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+
+  <!-- ColorThief CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.4.0/color-thief.umd.js"></script>
+
+  <!-- html2canvas CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    /* ── Root Variables ─────────────────────────────────────────────────── */
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #222222;
+      --accent: #1DB954;       /* Spotify green */
+      --accent-dim: #157a38;
+      --text: #f0ede8;
+      --text-muted: #888880;
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Scrollbar ──────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Auth Screen ────────────────────────────────────────────────────── */
+    #auth-section {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #auth-section::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 60px,
+          rgba(255,255,255,0.015) 60px,
+          rgba(255,255,255,0.015) 61px
+        ),
+        repeating-linear-gradient(
+          90deg,
+          transparent,
+          transparent 60px,
+          rgba(255,255,255,0.015) 60px,
+          rgba(255,255,255,0.015) 61px
+        );
+      pointer-events: none;
+    }
+
+    .auth-wordmark {
+      font-family: var(--font-display);
+      font-size: clamp(3rem, 8vw, 6rem);
+      letter-spacing: 0.05em;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .auth-wordmark span { color: var(--accent); }
+
+    .auth-tagline {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.3em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .auth-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 2.5rem 3rem;
+      max-width: 440px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      position: relative;
+    }
+
+    .auth-card h2 {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .auth-card p {
+      font-size: 0.75rem;
+      line-height: 1.7;
+      color: var(--text-muted);
+    }
+
+    .auth-card ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .auth-card ul li {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+    }
+
+    .auth-card ul li::before { content: '→ '; color: var(--accent); }
+
+    /* ── Buttons ────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 0.7rem 1.4rem;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      background: transparent;
+      color: var(--text);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { background: #23e868; border-color: #23e868; }
+
+    .btn-outline {
+      border-color: var(--border);
+      color: var(--text-muted);
+    }
+    .btn-outline:hover { border-color: var(--text); color: var(--text); }
+
+    .btn-active {
+      background: var(--accent) !important;
+      color: #000 !important;
+      border-color: var(--accent) !important;
+    }
+
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── App Layout ─────────────────────────────────────────────────────── */
+    #app-section {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    #app-header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+    }
+
+    .header-logo {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      letter-spacing: 0.12em;
+    }
+    .header-logo span { color: var(--accent); }
+
+    .header-user {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    #user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: none;
+      object-fit: cover;
+      border: 1px solid var(--border);
+    }
+
+    #user-name {
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    /* ── Sidebar ────────────────────────────────────────────────────────── */
+    #sidebar {
+      grid-column: 1;
+      grid-row: 2;
+      border-right: 1px solid var(--border);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      overflow-y: auto;
+    }
+
+    .sidebar-section-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    .sidebar-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    /* ── Controls ───────────────────────────────────────────────────────── */
+    select {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      padding: 0.6rem 0.8rem;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.8rem center;
+    }
+
+    select:focus { outline: 1px solid var(--accent); }
+
+    /* ── Main Content ────────────────────────────────────────────────────── */
+    #main-content {
+      grid-column: 2;
+      grid-row: 2;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      overflow-y: auto;
+      background: var(--bg);
+    }
+
+    /* ── Poster Wrapper (A3 aspect ratio) ───────────────────────────────── */
+    #poster-wrapper {
+      width: 100%;
+      max-width: 600px;
+      aspect-ratio: 210 / 297; /* A4 proportions for screen; A3 used on export */
+      position: relative;
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 80px rgba(0,0,0,0.7);
+    }
+
+    /* Loading overlay */
+    #poster-loader {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      z-index: 10;
+    }
+
+    .loader-spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #poster-loader p {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: var(--text-muted);
+    }
+
+    /* ── Poster Canvas ───────────────────────────────────────────────────── */
+    #poster-canvas {
+      width: 100%;
+      height: 100%;
+      transition: opacity 0.4s ease;
+      opacity: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Album Template ─────────────────────────────────────────────────── */
+    .album-template {
+      padding: 0;
+    }
+
+    .poster-art-section {
+      flex: 0 0 62%;
+      overflow: hidden;
+    }
+
+    .poster-album-art {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .poster-bottom-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      padding: 1rem;
+      gap: 0.75rem;
+    }
+
+    .poster-tracklist-panel {
+      overflow: hidden;
+    }
+
+    .poster-tracklist-cols {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .poster-tracklist-col {
+      list-style: none;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .poster-tracklist-col li {
+      font-family: var(--font-mono);
+      font-size: 0.42rem;
+      letter-spacing: 0.05em;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .poster-info-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      text-align: right;
+    }
+
+    .palette-row {
+      display: flex;
+      gap: 3px;
+      justify-content: flex-end;
+    }
+
+    .palette-swatch {
+      width: 14px;
+      height: 14px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .poster-artist-name {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      letter-spacing: 0.06em;
+      line-height: 1;
+      color: #fff;
+    }
+
+    .poster-album-title {
+      font-family: var(--font-mono);
+      font-style: italic;
+      font-size: 0.55rem;
+      letter-spacing: 0.12em;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .poster-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      font-size: 0.38rem;
+      letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.35);
+      font-family: var(--font-mono);
+    }
+
+    /* ── Receipt Template ───────────────────────────────────────────────── */
+    .receipt-template {
+      background: #f5f0e8 !important;
+      color: #1a1a1a;
+      padding: 1.5rem 1.2rem;
+      font-family: 'IBM Plex Mono', monospace;
+      justify-content: space-between;
+    }
+
+    .receipt-header { text-align: center; }
+
+    .receipt-logo {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.3rem;
+    }
+
+    .receipt-store {
+      font-size: 0.55rem;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.2rem;
+    }
+
+    .receipt-date { font-size: 0.42rem; color: #555; margin-bottom: 0.4rem; }
+
+    .receipt-divider {
+      font-size: 0.42rem;
+      letter-spacing: 0.05em;
+      color: #999;
+      margin: 0.3rem 0;
+    }
+
+    .receipt-items { flex: 1; overflow: hidden; }
+
+    .receipt-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.4rem;
+      padding: 0.25rem 0;
+      border-bottom: 1px dashed #ddd;
+    }
+
+    .receipt-idx {
+      font-size: 0.42rem;
+      color: #999;
+      flex-shrink: 0;
+      width: 16px;
+    }
+
+    .receipt-track-info {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .receipt-track-name {
+      display: block;
+      font-size: 0.48rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .receipt-artist {
+      display: block;
+      font-size: 0.38rem;
+      color: #777;
+      letter-spacing: 0.05em;
+    }
+
+    .receipt-dur {
+      font-size: 0.42rem;
+      color: #555;
+      flex-shrink: 0;
+    }
+
+    .receipt-footer { text-align: center; }
+
+    .receipt-total {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.5rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      padding: 0.3rem 0;
+    }
+
+    .receipt-barcode {
+      font-size: 0.55rem;
+      letter-spacing: -0.02em;
+      color: #222;
+      margin: 0.3rem 0;
+    }
+
+    .receipt-tagline {
+      font-size: 0.38rem;
+      letter-spacing: 0.2em;
+      color: #999;
+    }
+
+    /* ── Festival Template ──────────────────────────────────────────────── */
+    .festival-template {
+      background: #0d0d0d !important;
+      padding: 1.2rem 1rem;
+      justify-content: space-between;
+    }
+
+    .festival-header { text-align: center; margin-bottom: 0.5rem; }
+
+    .festival-logo {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      letter-spacing: 0.2em;
+      color: #fff;
+      line-height: 1;
+    }
+
+    .festival-subtitle {
+      font-size: 0.42rem;
+      letter-spacing: 0.25em;
+      color: var(--accent);
+      margin-top: 0.25rem;
+    }
+
+    .festival-lineup {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.6rem;
+    }
+
+    .festival-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.08);
+    }
+
+    .festival-tier {
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .tier-1 {
+      font-family: var(--font-display);
+      font-size: 1.3rem;
+      letter-spacing: 0.08em;
+      color: #fff;
+    }
+
+    .tier-2 {
+      font-family: var(--font-mono);
+      font-size: 0.55rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: rgba(255,255,255,0.85);
+    }
+
+    .tier-3 {
+      font-family: var(--font-mono);
+      font-size: 0.45rem;
+      letter-spacing: 0.1em;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .tier-4 {
+      font-family: var(--font-mono);
+      font-size: 0.36rem;
+      letter-spacing: 0.08em;
+      color: rgba(255,255,255,0.35);
+    }
+
+    .tier-dot { margin: 0 0.4rem; color: var(--accent); }
+
+    .festival-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.38rem;
+      letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.25);
+      margin-top: 0.5rem;
+    }
+
+    /* ── Error Banner ───────────────────────────────────────────────────── */
+    #error-banner {
+      display: none;
+      background: #1a1a1a;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      padding: 0.6rem 1rem;
+      width: 100%;
+      max-width: 600px;
+      text-align: center;
+    }
+
+    /* ── Action Buttons Row ─────────────────────────────────────────────── */
+    #action-row {
+      display: flex;
+      gap: 0.5rem;
+      width: 100%;
+      max-width: 600px;
+    }
+
+    /* ── Utility ─────────────────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+  </style>
 </head>
-<body class="bg-gray-100 text-gray-900 min-h-screen font-sans">
+<body>
 
-    <div class="max-w-6xl mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-        
-        <!-- Left Column: Controls -->
-        <div class="space-y-6 bg-white p-6 rounded-xl shadow-sm h-fit">
-            <h1 class="text-2xl font-bold tracking-tight">Album Poster Engine</h1>
-            <button id="login-btn" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-4 rounded-lg transition">
-                Connect Spotify Account
-            </button>
-            
-            <div id="controls" class="hidden space-y-4">
-                <button id="fetch-top-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition">
-                    Load Top Album Template
-                </button>
-                <button id="download-btn" class="w-full bg-neutral-900 hover:bg-black text-white font-medium py-2 px-4 rounded-lg transition">
-                    Export High-Res Poster
-                </button>
-            </div>
-        </div>
+  <!-- ── Auth Screen ──────────────────────────────────────────────────────── -->
+  <section id="auth-section">
+    <div class="auth-wordmark">YOUR<span>WRAP</span></div>
+    <p class="auth-tagline">On-demand · Printable · A3 Poster Generator</p>
 
-        <!-- Right Column: Print Preview Canvas (Maintains A3 Aspect Ratio) -->
-        <div class="flex justify-center items-start">
-            <div id="poster-capture-area" class="bg-white w-[380px] h-[537px] shadow-2xl p-6 flex flex-col justify-between relative overflow-hidden box-border border border-gray-200">
-                
-                <!-- Album Artwork Section -->
-                <div class="w-full aspect-square bg-gray-200 overflow-hidden flex items-center justify-center">
-                    <img id="poster-art" crossOrigin="anonymous" src="https://placehold.co" class="w-full h-full object-cover hidden">
-                    <div id="art-fallback" class="text-gray-400 text-sm">No Artwork Loaded</div>
-                </div>
-
-                <!-- Bottom Layout Grid -->
-                <div class="grid grid-cols-2 gap-4 pt-4 mt-auto items-end">
-                    <!-- Left: Tracklist Output -->
-                    <div class="space-y-1">
-                        <ol id="poster-tracks" class="text-[7px] leading-tight font-bold uppercase text-gray-800 tracking-wide list-decimal pl-3 space-y-0.5">
-                            <li>Select an item to preview</li>
-                        </ol>
-                    </div>
-
-                    <!-- Right: Metadata & Branding Blocks -->
-                    <div class="text-right space-y-3 flex flex-col items-end">
-                        <!-- Color Swatches Grid -->
-                        <div id="palette-container" class="flex gap-1 justify-end h-3 w-24">
-                            <div class="w-full bg-gray-300"></div>
-                        </div>
-                        
-                        <div>
-                            <h2 id="poster-artist" class="text-xs font-black uppercase tracking-tighter leading-none text-neutral-900">Artist Name</h2>
-                            <h3 id="poster-album" class="text-[10px] font-bold uppercase tracking-tight text-neutral-700 mt-0.5">Album Title</h3>
-                        </div>
-
-                        <!-- Mini Footer Notes -->
-                        <div class="text-[5px] text-gray-500 font-mono tracking-tight leading-none text-right">
-                            <p id="poster-label">LABEL: PRODUCTION CO</p>
-                            <p id="poster-date" class="mt-0.5">RELEASED ON: MM DD, YYYY</p>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
+    <div class="auth-card">
+      <h2>Connect Spotify</h2>
+      <p>
+        Generate high-resolution music posters from your own listening history.
+        We use the official Spotify PKCE flow — no passwords or secrets are stored on any server.
+      </p>
+      <ul>
+        <li>Minimalist album art poster</li>
+        <li>Top 10 receipt / ticket stub</li>
+        <li>Festival lineup poster</li>
+      </ul>
+      <button id="login-btn" class="btn btn-primary">
+        ▶ Connect with Spotify
+      </button>
+      <p style="font-size:0.62rem; color: #555;">
+        Requires scopes: <code>user-top-read</code>, <code>user-library-read</code>
+      </p>
     </div>
+  </section>
 
-    <script type="module" src="app.js"></script>
+  <!-- ── App Shell ────────────────────────────────────────────────────────── -->
+  <div id="app-section" class="hidden">
+
+    <!-- Header -->
+    <header id="app-header">
+      <div class="header-logo">YOUR<span>WRAP</span></div>
+      <div class="header-user">
+        <img id="user-avatar" src="" alt="User avatar" />
+        <span id="user-name"></span>
+        <button id="logout-btn" class="btn btn-outline">Logout</button>
+      </div>
+    </header>
+
+    <!-- Sidebar: Controls -->
+    <aside id="sidebar">
+
+      <!-- Template Selection -->
+      <div class="sidebar-section">
+        <p class="sidebar-section-label">Template</p>
+        <button class="btn btn-active" data-template="album">Album Poster</button>
+        <button class="btn btn-outline" data-template="receipt">Receipt / Ticket</button>
+        <button class="btn btn-outline" data-template="festival">Festival Lineup</button>
+      </div>
+
+      <!-- Time Range -->
+      <div class="sidebar-section">
+        <p class="sidebar-section-label">Time Range</p>
+        <select id="time-range-select">
+          <option value="short_term">Last 4 Weeks</option>
+          <option value="medium_term" selected>Last 6 Months</option>
+          <option value="long_term">All Time</option>
+        </select>
+      </div>
+
+      <!-- Export -->
+      <div class="sidebar-section">
+        <p class="sidebar-section-label">Export</p>
+        <button id="export-btn" class="btn btn-primary">Download Poster</button>
+        <button id="save-btn" class="btn btn-outline">Save Session</button>
+        <p style="font-size:0.58rem; color: #555; line-height:1.6; margin-top:0.5rem;">
+          Download renders at 4× scale for sharp A3 print output (~300dpi equivalent).
+        </p>
+      </div>
+
+    </aside>
+
+    <!-- Main: Poster Preview -->
+    <main id="main-content">
+
+      <!-- Error / Toast Banner -->
+      <div id="error-banner"></div>
+
+      <!-- Poster Wrapper: enforces A4/A3 aspect ratio on screen -->
+      <div id="poster-wrapper">
+        <!-- Loading Overlay -->
+        <div id="poster-loader">
+          <div class="loader-spinner"></div>
+          <p>Generating poster…</p>
+        </div>
+
+        <!-- THE CANVAS — html2canvas targets this element for export -->
+        <div id="poster-canvas"></div>
+      </div>
+
+      <!-- Action Row below poster -->
+      <div id="action-row">
+        <button class="btn btn-outline" style="font-size:0.6rem; color:#555;" onclick="document.getElementById('export-btn').click()">
+          ↓ Download High-Res PNG
+        </button>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Auth module must load first; app.js depends on SpotifyAuth -->
+  <script src="auth.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

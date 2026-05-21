@@ -1,30 +1,18 @@
 /**
  * app.js — Core Application Logic
- * Spotify API fetching, ColorThief extraction, DOM mapping, poster rendering, and export.
+ * Spotify API · ColorThief · DOM Poster Builders · Export
  */
 
-// ─── Spotify API Layer ────────────────────────────────────────────────────────
+// ─── Spotify API ──────────────────────────────────────────────────────────────
 
 const SPOTIFY_API = 'https://api.spotify.com/v1';
 
-/**
- * Generic authenticated fetch wrapper for Spotify endpoints.
- * @param {string} endpoint - Relative or absolute Spotify API URL.
- * @returns {Promise<Object>}
- */
 async function spotifyFetch(endpoint) {
   const token = await window.SpotifyAuth.getAccessToken();
   if (!token) throw new Error('No valid access token. Please log in again.');
-
   const url = endpoint.startsWith('http') ? endpoint : `${SPOTIFY_API}${endpoint}`;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (response.status === 401) {
-    window.SpotifyAuth.logout();
-    throw new Error('Session expired. Please log in again.');
-  }
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (response.status === 401) { window.SpotifyAuth.logout(); throw new Error('Session expired.'); }
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.error?.message || `Spotify API error: ${response.status}`);
@@ -32,277 +20,367 @@ async function spotifyFetch(endpoint) {
   return response.json();
 }
 
-/**
- * Fetches current user's Spotify profile.
- */
-async function fetchUserProfile() {
-  return spotifyFetch('/me');
+async function fetchUserProfile()                        { return spotifyFetch('/me'); }
+async function fetchTopTracks(tr = 'medium_term', n=10)  { return spotifyFetch(`/me/top/tracks?time_range=${tr}&limit=${n}`); }
+async function fetchTopArtists(tr = 'medium_term', n=30) { return spotifyFetch(`/me/top/artists?time_range=${tr}&limit=${n}`); }
+async function fetchAlbum(id)                            { return spotifyFetch(`/albums/${id}`); }
+async function searchAlbums(q)                           { return spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=album&limit=8`); }
+
+async function fetchTopAlbums(timeRange = 'medium_term') {
+  const data = await fetchTopTracks(timeRange, 50);
+  const seen = new Map();
+  for (const t of (data.items || [])) { if (!seen.has(t.album.id)) seen.set(t.album.id, t.album); }
+  return Array.from(seen.values()).slice(0, 12);
 }
 
-/**
- * Fetches user's top tracks for a given time range.
- * @param {'short_term'|'medium_term'|'long_term'} timeRange
- * @param {number} limit
- */
-async function fetchTopTracks(timeRange = 'medium_term', limit = 10) {
-  return spotifyFetch(`/me/top/tracks?time_range=${timeRange}&limit=${limit}`);
-}
+// ─── Color Utils ──────────────────────────────────────────────────────────────
 
-/**
- * Fetches user's top artists.
- * @param {'short_term'|'medium_term'|'long_term'} timeRange
- * @param {number} limit
- */
-async function fetchTopArtists(timeRange = 'medium_term', limit = 30) {
-  return spotifyFetch(`/me/top/artists?time_range=${timeRange}&limit=${limit}`);
-}
-
-/**
- * Fetches full album metadata including tracks.
- * @param {string} albumId
- */
-async function fetchAlbum(albumId) {
-  return spotifyFetch(`/albums/${albumId}`);
-}
-
-// ─── Color Extraction ─────────────────────────────────────────────────────────
-
-/**
- * Uses ColorThief to extract the dominant palette from an image element.
- * Requires the image to be fully loaded and CORS-enabled.
- * @param {HTMLImageElement} imgEl
- * @param {number} count - Number of palette colors to extract.
- * @returns {string[]} Array of hex color strings.
- */
-function extractPalette(imgEl, count = 5) {
+function extractPalette(imgEl, count = 6) {
   try {
-    const thief = new ColorThief();
-    const palette = thief.getPalette(imgEl, count);
-    return palette.map(([r, g, b]) => rgbToHex(r, g, b));
-  } catch (err) {
-    console.warn('[app] ColorThief extraction failed:', err);
-    return ['#1a1a1a', '#2d2d2d', '#3f3f3f', '#555555', '#717171'];
-  }
+    const t = new ColorThief();
+    return t.getPalette(imgEl, count).map(([r,g,b]) => rgbToHex(r,g,b));
+  } catch { return ['#1a1a1a','#2d2d2d','#3f3f3f','#555','#717171','#999']; }
 }
-
-function rgbToHex(r, g, b) {
-  return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+function rgbToHex(r,g,b) { return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+function luminance(hex) {
+  const r=parseInt(hex.slice(1,3),16)/255, g=parseInt(hex.slice(3,5),16)/255, b=parseInt(hex.slice(5,7),16)/255;
+  return 0.2126*r+0.7152*g+0.0722*b;
 }
-
-/**
- * Loads an image element with crossOrigin anonymous and returns it on load.
- * @param {string} url
- * @returns {Promise<HTMLImageElement>}
- */
+function getContrastColor(hex) { return luminance(hex) > 0.38 ? '#000000' : '#ffffff'; }
+function darken(hex, amt=40) {
+  let r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return rgbToHex(Math.max(0,r-amt), Math.max(0,g-amt), Math.max(0,b-amt));
+}
 function loadCorsImage(url) {
-  return new Promise((resolve, reject) => {
+  return new Promise((res, rej) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
-    // Use a proxy-safe approach: append a cache-buster to bypass cached non-CORS responses
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error(`Image load failed: ${url}`));
     img.src = url;
   });
 }
 
-// ─── Poster Templates ─────────────────────────────────────────────────────────
+// ─── Album Picker ─────────────────────────────────────────────────────────────
 
-/**
- * Renders Template 1: Minimalist Album Poster
- * @param {string} timeRange
- */
-async function renderAlbumPoster(timeRange) {
-  showPosterLoading(true);
-  setPosterVisible(false);
-
+async function openAlbumPicker() {
+  document.getElementById('album-picker-panel').classList.remove('hidden');
+  document.getElementById('album-search-input').value = '';
+  document.getElementById('album-search-results').innerHTML = '';
+  await loadTopAlbumsIntoGrid();
+}
+function closeAlbumPicker() {
+  document.getElementById('album-picker-panel').classList.add('hidden');
+}
+async function loadTopAlbumsIntoGrid() {
+  const grid = document.getElementById('album-search-results');
+  const tr = document.getElementById('time-range-select')?.value || 'medium_term';
+  grid.innerHTML = '<p class="picker-status">Loading your top albums…</p>';
   try {
-    const tracksData = await fetchTopTracks(timeRange, 1);
-    if (!tracksData.items?.length) throw new Error('No top tracks found for this time period.');
+    const albums = await fetchTopAlbums(tr);
+    if (!albums.length) { grid.innerHTML = '<p class="picker-status">No albums found.</p>'; return; }
+    renderAlbumGrid(albums, grid);
+  } catch (e) { grid.innerHTML = `<p class="picker-status error">${e.message}</p>`; }
+}
+async function runAlbumSearch(query) {
+  if (!query.trim()) { await loadTopAlbumsIntoGrid(); return; }
+  const grid = document.getElementById('album-search-results');
+  grid.innerHTML = '<p class="picker-status">Searching…</p>';
+  try {
+    const data = await searchAlbums(query);
+    const albums = data.albums?.items || [];
+    if (!albums.length) { grid.innerHTML = '<p class="picker-status">No results.</p>'; return; }
+    renderAlbumGrid(albums, grid);
+  } catch (e) { grid.innerHTML = `<p class="picker-status error">${e.message}</p>`; }
+}
+function renderAlbumGrid(albums, container) {
+  container.innerHTML = '';
+  albums.forEach(album => {
+    const thumb = album.images?.[1]?.url || album.images?.[0]?.url;
+    const card = document.createElement('button');
+    card.className = 'album-picker-card';
+    card.innerHTML = `
+      <img src="${thumb}" alt="${album.name}" crossorigin="anonymous"/>
+      <div class="album-picker-info">
+        <span class="picker-name">${album.name}</span>
+        <span class="picker-artist">${album.artists?.[0]?.name || ''}</span>
+      </div>`;
+    card.addEventListener('click', async () => { closeAlbumPicker(); await renderAlbumPosterFromId(album.id); });
+    container.appendChild(card);
+  });
+}
 
-    const topTrack = tracksData.items[0];
-    const album = await fetchAlbum(topTrack.album.id);
+// ═══════════════════════════════════════════════════════════════════════════════
+// TEMPLATE 1 — ALBUM ART POSTER (Swiss Minimalist)
+// ═══════════════════════════════════════════════════════════════════════════════
 
-    // Load album art with CORS headers for canvas export
+async function renderAlbumPosterFromId(albumId) {
+  showPosterLoading(true); setPosterVisible(false);
+  try {
+    const album = await fetchAlbum(albumId);
     const artUrl = album.images[0]?.url;
-    if (!artUrl) throw new Error('Album art not available.');
-
+    if (!artUrl) throw new Error('Album art unavailable.');
     const artImg = await loadCorsImage(artUrl);
-    const palette = extractPalette(artImg, 5);
-
-    // Build poster DOM
-    buildAlbumPosterDOM(album, topTrack, palette, artUrl);
-    setPosterVisible(true);
-    setActivePosterType('album');
-
-    // Store for export
-    window._currentPosterData = { type: 'album', album, topTrack, palette, artUrl };
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    showPosterLoading(false);
-  }
+    const palette = extractPalette(artImg, 6);
+    buildAlbumPosterDOM(album, palette, artUrl);
+    setPosterVisible(true); setActivePosterType('album');
+    window._currentPosterData = { type:'album', album, palette, artUrl };
+  } catch(e) { showError(e.message); }
+  finally { showPosterLoading(false); }
 }
 
-/**
- * Renders Template 2: Receipt / Ticket Stub
- * @param {string} timeRange
- */
-async function renderReceiptPoster(timeRange) {
-  showPosterLoading(true);
-  setPosterVisible(false);
-
+async function renderAlbumPoster(timeRange) {
+  showPosterLoading(true); setPosterVisible(false);
   try {
-    const [tracksData, profileData] = await Promise.all([
-      fetchTopTracks(timeRange, 10),
-      fetchUserProfile(),
-    ]);
-
-    if (!tracksData.items?.length) throw new Error('No top tracks found.');
-    buildReceiptPosterDOM(tracksData.items, profileData);
-    setPosterVisible(true);
-    setActivePosterType('receipt');
-
-    window._currentPosterData = { type: 'receipt', tracks: tracksData.items, profile: profileData };
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    showPosterLoading(false);
-  }
+    const data = await fetchTopTracks(timeRange, 1);
+    if (!data.items?.length) throw new Error('No top tracks found.');
+    await renderAlbumPosterFromId(data.items[0].album.id);
+  } catch(e) { showError(e.message); showPosterLoading(false); }
 }
 
-/**
- * Renders Template 3: Festival Lineup Poster
- * @param {string} timeRange
- */
-async function renderFestivalPoster(timeRange) {
-  showPosterLoading(true);
-  setPosterVisible(false);
-
-  try {
-    const artistsData = await fetchTopArtists(timeRange, 30);
-    if (!artistsData.items?.length) throw new Error('No top artists found.');
-    buildFestivalPosterDOM(artistsData.items);
-    setPosterVisible(true);
-    setActivePosterType('festival');
-
-    window._currentPosterData = { type: 'festival', artists: artistsData.items };
-  } catch (err) {
-    showError(err.message);
-  } finally {
-    showPosterLoading(false);
-  }
-}
-
-// ─── DOM Builders ─────────────────────────────────────────────────────────────
-
-function buildAlbumPosterDOM(album, topTrack, palette, artUrl) {
+function buildAlbumPosterDOM(album, palette, artUrl) {
   const poster = document.getElementById('poster-canvas');
   poster.innerHTML = '';
   poster.className = 'poster-canvas album-template';
-  poster.style.background = palette[0] || '#0f0f0f';
 
-  // Top: album artwork
-  const artSection = document.createElement('div');
-  artSection.className = 'poster-art-section';
-  const img = document.createElement('img');
-  img.src = artUrl;
-  img.crossOrigin = 'anonymous';
-  img.alt = album.name;
-  img.className = 'poster-album-art';
-  artSection.appendChild(img);
-  poster.appendChild(artSection);
+  const bg       = palette[0] || '#0a0a0a';
+  const accent   = palette[1] || '#ffffff';
+  const ink      = getContrastColor(bg);
+  const inkMuted = ink === '#ffffff' ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)';
+  const inkDim   = ink === '#ffffff' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
+  const border   = ink === '#ffffff' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
 
-  // Bottom: info grid
-  const bottomGrid = document.createElement('div');
-  bottomGrid.className = 'poster-bottom-grid';
+  poster.style.cssText = `background:${bg}; color:${ink};`;
 
-  // Left: tracklist
-  const tracklistPanel = document.createElement('div');
-  tracklistPanel.className = 'poster-tracklist-panel';
-  const tracks = album.tracks?.items || [];
-  const half = Math.ceil(tracks.length / 2);
-  const col1 = tracks.slice(0, half);
-  const col2 = tracks.slice(half);
+  const tracks  = album.tracks?.items || [];
+  const half    = Math.ceil(tracks.length / 2);
+  const col1    = tracks.slice(0, half);
+  const col2    = tracks.slice(half);
+  const releaseYear = (album.release_date || '').split('-')[0];
+  const artistName  = album.artists?.map(a => a.name).join(', ') || '';
 
-  const tracksHtml = `
-    <div class="poster-tracklist-cols">
-      <ol class="poster-tracklist-col" start="1">
-        ${col1.map((t, i) => `<li>${String(i + 1).padStart(2, '0')}. ${t.name.toUpperCase()}</li>`).join('')}
-      </ol>
-      ${col2.length ? `<ol class="poster-tracklist-col" start="${half + 1}">
-        ${col2.map((t, i) => `<li>${String(half + i + 1).padStart(2, '0')}. ${t.name.toUpperCase()}</li>`).join('')}
-      </ol>` : ''}
+  const formatDur = ms => ms ? `${Math.floor(ms/60000)}′${String(Math.floor((ms%60000)/1000)).padStart(2,'0')}″` : '';
+
+  const trackRow = (t, i) => `
+    <div class="alb-track-row" style="border-color:${border}">
+      <span class="alb-tn" style="color:${inkMuted}">${String(i+1).padStart(2,'0')}</span>
+      <span class="alb-tt" style="color:${inkDim}">${t.name.toUpperCase()}</span>
+      <span class="alb-td" style="color:${inkMuted}">${formatDur(t.duration_ms)}</span>
     </div>`;
-  tracklistPanel.innerHTML = tracksHtml;
 
-  // Right: palette + artist + album info
-  const infoPanel = document.createElement('div');
-  infoPanel.className = 'poster-info-panel';
-
-  const swatchRow = palette.map((hex) =>
-    `<span class="palette-swatch" style="background:${hex}" title="${hex}"></span>`
+  const swatches = palette.map(hex =>
+    `<span class="alb-swatch" style="background:${hex};outline:1px solid ${border}" title="${hex}"></span>`
   ).join('');
 
-  const releaseYear = album.release_date?.split('-')[0] || '';
-  const label = album.label || '';
-  const artistNames = album.artists?.map((a) => a.name).join(', ') || topTrack.artists?.[0]?.name || '';
+  poster.innerHTML = `
+    <!-- ── Art Block ── -->
+    <div class="alb-art-block">
+      <img class="alb-art-img" src="${artUrl}" crossorigin="anonymous" alt="${album.name}"/>
+      <!-- Gradient overlay at bottom of art -->
+      <div class="alb-art-fade" style="background:linear-gradient(to bottom, transparent 60%, ${bg})"></div>
+    </div>
 
-  infoPanel.innerHTML = `
-    <div class="palette-row">${swatchRow}</div>
-    <div class="poster-artist-name">${artistNames.toUpperCase()}</div>
-    <div class="poster-album-title"><em>${album.name}</em></div>
-    <div class="poster-meta">
-      <span>LABEL: ${label || '—'}</span>
-      <span>RELEASED: ${releaseYear}</span>
+    <!-- ── Divider rule ── -->
+    <div class="alb-rule" style="background:${border}"></div>
+
+    <!-- ── Bottom grid ── -->
+    <div class="alb-bottom">
+
+      <!-- Left: tracklist -->
+      <div class="alb-tracks-section">
+        <div class="alb-section-label" style="color:${inkMuted}">TRACKLIST</div>
+        <div class="alb-tracklist-cols">
+          <div class="alb-col">
+            ${col1.map((t,i) => trackRow(t,i)).join('')}
+          </div>
+          ${col2.length ? `<div class="alb-col">${col2.map((t,i) => trackRow(t, half+i)).join('')}</div>` : ''}
+        </div>
+      </div>
+
+      <!-- Right: identity block -->
+      <div class="alb-identity">
+        <!-- Palette row -->
+        <div class="alb-palette">${swatches}</div>
+        <!-- Artist -->
+        <div class="alb-artist" style="color:${ink}">${artistName.toUpperCase()}</div>
+        <!-- Album title -->
+        <div class="alb-title" style="color:${inkDim}">${album.name}</div>
+        <!-- Meta -->
+        <div class="alb-meta" style="color:${inkMuted}; border-top:1px solid ${border}">
+          ${album.label ? `<span>LABEL — ${album.label.toUpperCase()}</span>` : ''}
+          ${releaseYear ? `<span>© ${releaseYear}</span>` : ''}
+          <span>${tracks.length} TRACKS</span>
+        </div>
+      </div>
     </div>`;
-
-  bottomGrid.appendChild(tracklistPanel);
-  bottomGrid.appendChild(infoPanel);
-  poster.appendChild(bottomGrid);
 }
 
-function buildReceiptPosterDOM(tracks, profile) {
+// ═══════════════════════════════════════════════════════════════════════════════
+// TEMPLATE 2 — RECEIPT (Thermal Printer)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function renderReceiptPoster(timeRange) {
+  showPosterLoading(true); setPosterVisible(false);
+  try {
+    const [tracksData, profile] = await Promise.all([
+      fetchTopTracks(timeRange, 10),
+      fetchUserProfile(),
+    ]);
+    if (!tracksData.items?.length) throw new Error('No top tracks found.');
+    buildReceiptPosterDOM(tracksData.items, profile, timeRange);
+    setPosterVisible(true); setActivePosterType('receipt');
+    window._currentPosterData = { type:'receipt', tracks: tracksData.items, profile, timeRange };
+  } catch(e) { showError(e.message); }
+  finally { showPosterLoading(false); }
+}
+
+function buildReceiptPosterDOM(tracks, profile, timeRange) {
   const poster = document.getElementById('poster-canvas');
   poster.innerHTML = '';
   poster.className = 'poster-canvas receipt-template';
 
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase();
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const totalMs = tracks.reduce((sum, t) => sum + (t.duration_ms || 0), 0);
-  const totalMin = Math.floor(totalMs / 60000);
+  const now     = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { year:'numeric', month:'2-digit', day:'2-digit' });
+  const timeStr = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  const orderNo = '#' + Math.floor(10000 + Math.random()*90000);
 
-  const rows = tracks.map((t, i) => {
-    const dur = t.duration_ms ? `${Math.floor(t.duration_ms / 60000)}:${String(Math.floor((t.duration_ms % 60000) / 1000)).padStart(2, '0')}` : '--';
+  const rangeLabel = { short_term:'LAST 4 WEEKS', medium_term:'LAST 6 MONTHS', long_term:'ALL TIME' }[timeRange] || '';
+
+  const totalMs   = tracks.reduce((s,t) => s + (t.duration_ms||0), 0);
+  const totalMin  = Math.floor(totalMs/60000);
+  const totalSec  = Math.floor((totalMs%60000)/1000);
+  const avgPop    = Math.round(tracks.reduce((s,t)=>s+(t.popularity||0),0)/tracks.length);
+
+  const formatDur = ms => {
+    const m = Math.floor(ms/60000), s = String(Math.floor((ms%60000)/1000)).padStart(2,'0');
+    return `${m}:${s}`;
+  };
+
+  // SVG barcode (decorative)
+  const widths = [3,1,2,1,3,1,1,2,3,1,2,1,1,3,2,1,3,1,2,1,3,1,1,2,1,3,2,1,1,3,2,1,3,1,2,1];
+  let x = 0;
+  const bars = widths.map((w, i) => {
+    const bar = i%2===0 ? `<rect x="${x}" y="0" width="${w*2}" height="32" fill="#1a1a1a"/>` : '';
+    x += w*2 + 1;
+    return bar;
+  }).join('');
+
+  const rows = tracks.map((t,i) => {
+    const dur = t.duration_ms ? formatDur(t.duration_ms) : '--:--';
+    const pop = t.popularity != null ? `${t.popularity}%` : '';
+    const artist = (t.artists?.[0]?.name || '').toUpperCase().slice(0, 22);
+    const name   = t.name.toUpperCase().slice(0, 26);
     return `
-      <div class="receipt-row">
-        <span class="receipt-idx">${String(i + 1).padStart(2, '0')}</span>
-        <div class="receipt-track-info">
-          <span class="receipt-track-name">${t.name.toUpperCase()}</span>
-          <span class="receipt-artist">${t.artists?.[0]?.name?.toUpperCase() || ''}</span>
+      <div class="rcp-item">
+        <div class="rcp-item-head">
+          <span class="rcp-idx">${String(i+1).padStart(2,'0')}</span>
+          <span class="rcp-name">${name}</span>
+          <span class="rcp-dur">${dur}</span>
         </div>
-        <span class="receipt-dur">${dur}</span>
+        <div class="rcp-item-sub">
+          <span class="rcp-artist">${artist}</span>
+          <span class="rcp-pop">${pop}</span>
+        </div>
       </div>`;
   }).join('');
 
   poster.innerHTML = `
-    <div class="receipt-header">
-      <div class="receipt-logo">★ SPOTIFY WRAPPED ★</div>
-      <div class="receipt-store">${(profile.display_name || 'LISTENER').toUpperCase()}'S TOP TRACKS</div>
-      <div class="receipt-date">${dateStr} · ${timeStr}</div>
-      <div class="receipt-divider">- - - - - - - - - - - - - - - - - - - - -</div>
-    </div>
-    <div class="receipt-items">${rows}</div>
-    <div class="receipt-footer">
-      <div class="receipt-divider">- - - - - - - - - - - - - - - - - - - - -</div>
-      <div class="receipt-total">
-        <span>TOTAL LISTENING</span>
-        <span>${totalMin} MIN</span>
+    <div class="rcp-paper">
+      <!-- Noise texture overlay -->
+      <div class="rcp-noise"></div>
+
+      <!-- Torn top edge -->
+      <svg class="rcp-tear rcp-tear-top" viewBox="0 0 300 12" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0,12 L0,6 Q10,0 20,5 Q30,10 40,4 Q50,0 60,6 Q70,10 80,3 Q90,0 100,7 Q110,11 120,4 Q130,0 140,6 Q150,10 160,3 Q170,0 180,7 Q190,11 200,4 Q210,0 220,6 Q230,10 240,3 Q250,0 260,7 Q270,11 280,4 Q290,0 300,5 L300,12 Z" fill="#f5f0e6"/>
+      </svg>
+
+      <div class="rcp-body">
+        <!-- Store header -->
+        <div class="rcp-store-header">
+          <div class="rcp-logo-line">★ SPOTIFY RECEIPT ★</div>
+          <div class="rcp-store-name">${(profile.display_name || 'LISTENER').toUpperCase()}</div>
+          <div class="rcp-store-sub">MUSIC CONSUMPTION RECORD</div>
+          <div class="rcp-store-addr">INTERNET · EVERYWHERE · ALWAYS</div>
+        </div>
+
+        <div class="rcp-dashed"></div>
+
+        <!-- Transaction info -->
+        <div class="rcp-info-block">
+          <div class="rcp-info-row"><span>DATE</span><span>${dateStr}</span></div>
+          <div class="rcp-info-row"><span>TIME</span><span>${timeStr}</span></div>
+          <div class="rcp-info-row"><span>ORDER</span><span>${orderNo}</span></div>
+          <div class="rcp-info-row"><span>PERIOD</span><span>${rangeLabel}</span></div>
+          <div class="rcp-info-row"><span>CASHIER</span><span>SPOTIFY API</span></div>
+        </div>
+
+        <div class="rcp-dashed"></div>
+
+        <!-- Column headers -->
+        <div class="rcp-col-heads">
+          <span>#  ITEM</span>
+          <span>TIME</span>
+        </div>
+
+        <div class="rcp-dashed"></div>
+
+        <!-- Track rows -->
+        <div class="rcp-items">${rows}</div>
+
+        <div class="rcp-dashed"></div>
+
+        <!-- Totals -->
+        <div class="rcp-totals">
+          <div class="rcp-total-row"><span>ITEMS</span><span>${tracks.length} TRACKS</span></div>
+          <div class="rcp-total-row"><span>SUBTOTAL</span><span>${totalMin}:${String(totalSec).padStart(2,'0')}</span></div>
+          <div class="rcp-total-row"><span>AVG POPULARITY</span><span>${avgPop}%</span></div>
+          <div class="rcp-dashed"></div>
+          <div class="rcp-total-row rcp-grand"><span>TOTAL TIME</span><span>${totalMin} MIN</span></div>
+        </div>
+
+        <div class="rcp-dashed"></div>
+
+        <!-- Footer messages -->
+        <div class="rcp-messages">
+          <div class="rcp-msg-main">THANK YOU FOR YOUR</div>
+          <div class="rcp-msg-main">EXCELLENT TASTE</div>
+          <div class="rcp-msg-sub">NO REFUNDS · ALL STREAMS FINAL</div>
+          <div class="rcp-msg-sub">VALID FOR BRAGGING RIGHTS ONLY</div>
+        </div>
+
+        <div class="rcp-dashed"></div>
+
+        <!-- Barcode -->
+        <div class="rcp-barcode-block">
+          <svg class="rcp-barcode-svg" viewBox="0 0 ${x} 32" preserveAspectRatio="none">${bars}</svg>
+          <div class="rcp-barcode-num">${orderNo.replace('#','')} ${Date.now().toString().slice(-8)}</div>
+        </div>
+
+        <div class="rcp-powered">POWERED BY SPOTIFY WEB API</div>
+        <div class="rcp-powered">yourwrap.app · ${now.getFullYear()}</div>
       </div>
-      <div class="receipt-divider">- - - - - - - - - - - - - - - - - - - - -</div>
-      <div class="receipt-barcode">||||| ||| || ||||| || ||| ||||| || |||| |||</div>
-      <div class="receipt-tagline">THANK YOU FOR YOUR GOOD TASTE</div>
+
+      <!-- Torn bottom edge -->
+      <svg class="rcp-tear rcp-tear-bot" viewBox="0 0 300 12" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0,0 L0,6 Q10,12 20,7 Q30,2 40,8 Q50,12 60,6 Q70,2 80,9 Q90,12 100,5 Q110,1 120,8 Q130,12 140,6 Q150,2 160,9 Q170,12 180,5 Q190,1 200,8 Q210,12 220,6 Q230,2 240,9 Q250,12 260,5 Q270,1 280,8 Q290,12 300,7 L300,0 Z" fill="#f5f0e6"/>
+      </svg>
     </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TEMPLATE 3 — FESTIVAL LINEUP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function renderFestivalPoster(timeRange) {
+  showPosterLoading(true); setPosterVisible(false);
+  try {
+    const data = await fetchTopArtists(timeRange, 30);
+    if (!data.items?.length) throw new Error('No top artists found.');
+    buildFestivalPosterDOM(data.items);
+    setPosterVisible(true); setActivePosterType('festival');
+    window._currentPosterData = { type:'festival', artists: data.items };
+  } catch(e) { showError(e.message); }
+  finally { showPosterLoading(false); }
 }
 
 function buildFestivalPosterDOM(artists) {
@@ -310,224 +388,141 @@ function buildFestivalPosterDOM(artists) {
   poster.innerHTML = '';
   poster.className = 'poster-canvas festival-template';
 
-  // Split artists by tier based on rank
-  const headliners = artists.slice(0, 3);
-  const tier2 = artists.slice(3, 8);
-  const tier3 = artists.slice(8, 16);
-  const tier4 = artists.slice(16, 30);
-
-  const now = new Date();
-  const year = now.getFullYear();
+  const t1 = artists.slice(0,3), t2 = artists.slice(3,8);
+  const t3 = artists.slice(8,16), t4 = artists.slice(16,30);
+  const year = new Date().getFullYear();
 
   poster.innerHTML = `
-    <div class="festival-header">
-      <div class="festival-logo">YOUR MUSIC FEST</div>
-      <div class="festival-subtitle">A PERSONAL MUSIC FESTIVAL · ${year} EDITION</div>
-    </div>
-    <div class="festival-lineup">
-      <div class="festival-tier tier-1">
-        ${headliners.map((a) => `<span>${a.name.toUpperCase()}</span>`).join('<span class="tier-dot">·</span>')}
+    <div class="fest-bg-texture"></div>
+    <div class="fest-inner">
+      <div class="fest-header">
+        <div class="fest-eyebrow">YOUR PERSONAL</div>
+        <div class="fest-logo">MUSIC<br>FESTIVAL</div>
+        <div class="fest-year">${year}</div>
       </div>
-      <div class="festival-divider"></div>
-      <div class="festival-tier tier-2">
-        ${tier2.map((a) => `<span>${a.name.toUpperCase()}</span>`).join(' · ')}
+      <div class="fest-rule"></div>
+      <div class="fest-tier fest-t1">
+        ${t1.map(a=>`<span>${a.name.toUpperCase()}</span>`).join('<span class="fest-dot">✦</span>')}
       </div>
-      <div class="festival-divider"></div>
-      <div class="festival-tier tier-3">
-        ${tier3.map((a) => `<span>${a.name.toUpperCase()}</span>`).join(' · ')}
+      <div class="fest-hairline"></div>
+      <div class="fest-tier fest-t2">${t2.map(a=>a.name.toUpperCase()).join(' · ')}</div>
+      <div class="fest-hairline"></div>
+      <div class="fest-tier fest-t3">${t3.map(a=>a.name.toUpperCase()).join(' · ')}</div>
+      <div class="fest-hairline"></div>
+      <div class="fest-tier fest-t4">${t4.map(a=>a.name.toUpperCase()).join(' · ')}</div>
+      <div class="fest-rule"></div>
+      <div class="fest-footer">
+        <span>ALL GENRES</span><span class="fest-diamond">◆</span>
+        <span>ALL STAGES</span><span class="fest-diamond">◆</span>
+        <span>BASED ON YOUR SPOTIFY DATA</span>
       </div>
-      <div class="festival-divider"></div>
-      <div class="festival-tier tier-4">
-        ${tier4.map((a) => `<span>${a.name.toUpperCase()}</span>`).join(' · ')}
-      </div>
-    </div>
-    <div class="festival-footer">
-      <span>BASED ON YOUR SPOTIFY DATA</span>
-      <span>★</span>
-      <span>ALL GENRES · ALL STAGES</span>
     </div>`;
 }
 
 // ─── UI Helpers ───────────────────────────────────────────────────────────────
 
-function showPosterLoading(visible) {
-  const loader = document.getElementById('poster-loader');
-  if (loader) loader.style.display = visible ? 'flex' : 'none';
+function showPosterLoading(v) { const l=document.getElementById('poster-loader'); if(l) l.style.display=v?'flex':'none'; }
+function setPosterVisible(v)  { const c=document.getElementById('poster-canvas'); if(c) c.style.opacity=v?'1':'0'; }
+function setActivePosterType(t) {
+  document.querySelectorAll('[data-template]').forEach(b => b.classList.toggle('btn-active', b.dataset.template===t));
+}
+function showError(msg) {
+  const el=document.getElementById('error-banner');
+  if(!el) return;
+  el.textContent=msg; el.style.display='block';
+  setTimeout(()=>el.style.display='none',5000);
+}
+function showUserProfile(p) {
+  const n=document.getElementById('user-name'), a=document.getElementById('user-avatar');
+  if(n) n.textContent=p.display_name||'Listener';
+  if(a&&p.images?.[0]?.url){a.src=p.images[0].url;a.style.display='block';}
 }
 
-function setPosterVisible(visible) {
-  const canvas = document.getElementById('poster-canvas');
-  if (canvas) canvas.style.opacity = visible ? '1' : '0';
-}
+// ─── Export ───────────────────────────────────────────────────────────────────
 
-function setActivePosterType(type) {
-  document.querySelectorAll('[data-template]').forEach((btn) => {
-    btn.classList.toggle('btn-active', btn.dataset.template === type);
-  });
-}
-
-function showError(message) {
-  const el = document.getElementById('error-banner');
-  if (!el) return;
-  el.textContent = message;
-  el.style.display = 'block';
-  setTimeout(() => (el.style.display = 'none'), 5000);
-}
-
-function showUserProfile(profile) {
-  const nameEl = document.getElementById('user-name');
-  const avatarEl = document.getElementById('user-avatar');
-  if (nameEl) nameEl.textContent = profile.display_name || 'Listener';
-  if (avatarEl && profile.images?.[0]?.url) {
-    avatarEl.src = profile.images[0].url;
-    avatarEl.style.display = 'block';
-  }
-}
-
-// ─── High-Res Export ──────────────────────────────────────────────────────────
-
-/**
- * Exports the poster canvas as a high-resolution PNG using html2canvas.
- * Uses scale: 4 for sharp print output at A3 dimensions.
- */
 async function exportPoster() {
   const poster = document.getElementById('poster-canvas');
-  if (!poster || poster.style.opacity === '0') {
-    showError('Please generate a poster first.');
-    return;
-  }
-
-  const exportBtn = document.getElementById('export-btn');
-  if (exportBtn) {
-    exportBtn.textContent = 'Exporting…';
-    exportBtn.disabled = true;
-  }
-
+  if (!poster || poster.style.opacity==='0') { showError('Please generate a poster first.'); return; }
+  const btn = document.getElementById('export-btn');
+  if (btn) { btn.textContent='Exporting…'; btn.disabled=true; }
   try {
     const canvas = await html2canvas(poster, {
-      scale: 4,                    // 4× for crisp 300dpi-equivalent print quality
-      useCORS: true,               // Allow cross-origin Spotify CDN images
-      allowTaint: false,           // Prevent canvas taint from foreign images
-      backgroundColor: null,       // Preserve poster background
-      logging: false,
-      imageTimeout: 15000,
+      scale:4, useCORS:true, allowTaint:false,
+      backgroundColor:null, logging:false, imageTimeout:15000,
     });
-
     const link = document.createElement('a');
-    link.download = `spotify-poster-${Date.now()}.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.download=`poster-${Date.now()}.png`;
+    link.href=canvas.toDataURL('image/png');
     link.click();
-  } catch (err) {
-    console.error('[app] Export failed:', err);
-    showError('Export failed. Please ensure album art loaded correctly and try again.');
+  } catch(e) {
+    console.error('[export]',e);
+    showError('Export failed. Ensure album art loaded correctly.');
   } finally {
-    if (exportBtn) {
-      exportBtn.textContent = 'Download Poster';
-      exportBtn.disabled = false;
-    }
+    if(btn){btn.textContent='Download Poster';btn.disabled=false;}
   }
 }
 
-// ─── Saved Posters (localStorage) ────────────────────────────────────────────
-
-const SAVED_POSTERS_KEY = 'saved_posters';
-
-function getSavedPosters() {
-  try {
-    return JSON.parse(localStorage.getItem(SAVED_POSTERS_KEY) || '[]');
-  } catch {
-    return [];
-  }
-}
+// ─── Saved Posters ────────────────────────────────────────────────────────────
 
 function saveCurrentPoster() {
-  if (!window._currentPosterData) {
-    showError('Nothing to save yet.');
-    return;
-  }
-  const posters = getSavedPosters();
-  const entry = {
-    id: Date.now(),
-    createdAt: new Date().toISOString(),
-    ...window._currentPosterData,
-  };
-  posters.unshift(entry);
-  localStorage.setItem(SAVED_POSTERS_KEY, JSON.stringify(posters.slice(0, 20))); // Keep last 20
-  showError('Poster saved! ✓'); // Reuse error banner as toast
+  if (!window._currentPosterData) { showError('Nothing to save yet.'); return; }
+  try {
+    const list = JSON.parse(localStorage.getItem('saved_posters')||'[]');
+    list.unshift({ id:Date.now(), createdAt:new Date().toISOString(), ...window._currentPosterData });
+    localStorage.setItem('saved_posters', JSON.stringify(list.slice(0,20)));
+    showError('Poster saved ✓');
+  } catch { showError('Save failed — storage may be full.'); }
 }
 
-// ─── App Bootstrap ────────────────────────────────────────────────────────────
+// ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 async function bootstrap() {
-  // 1. Handle OAuth callback if ?code= is in the URL
-  const callbackHandled = await window.SpotifyAuth.handleCallback();
-  if (callbackHandled) {
-    console.log('[app] OAuth callback handled successfully.');
-  }
+  await window.SpotifyAuth.handleCallback();
 
-  // 2. Check auth state and toggle UI sections
   if (window.SpotifyAuth.isAuthenticated()) {
     document.getElementById('auth-section')?.classList.add('hidden');
     document.getElementById('app-section')?.classList.remove('hidden');
-
-    // 3. Fetch and display profile
-    try {
-      const profile = await fetchUserProfile();
-      showUserProfile(profile);
-      localStorage.setItem(window.SpotifyAuth.STORAGE_KEYS.userProfile, JSON.stringify(profile));
-    } catch (err) {
-      console.warn('[app] Could not load profile:', err.message);
-    }
-
-    // 4. Auto-render the album poster with medium_term on first load
-    const currentTimeRange = document.getElementById('time-range-select')?.value || 'medium_term';
-    await renderAlbumPoster(currentTimeRange);
+    try { showUserProfile(await fetchUserProfile()); } catch(e) { console.warn(e.message); }
+    await renderAlbumPoster(document.getElementById('time-range-select')?.value||'medium_term');
   } else {
     document.getElementById('auth-section')?.classList.remove('hidden');
     document.getElementById('app-section')?.classList.add('hidden');
   }
-
-  // 5. Wire up all event listeners
   attachEventListeners();
 }
 
 function attachEventListeners() {
-  // Login button
-  document.getElementById('login-btn')?.addEventListener('click', () => {
-    window.SpotifyAuth.initiateLogin();
-  });
+  document.getElementById('login-btn')?.addEventListener('click', ()=>window.SpotifyAuth.initiateLogin());
+  document.getElementById('logout-btn')?.addEventListener('click', ()=>window.SpotifyAuth.logout());
+  document.getElementById('export-btn')?.addEventListener('click', exportPoster);
+  document.getElementById('save-btn')?.addEventListener('click', saveCurrentPoster);
 
-  // Logout button
-  document.getElementById('logout-btn')?.addEventListener('click', () => {
-    window.SpotifyAuth.logout();
-  });
-
-  // Template selector buttons
-  document.querySelectorAll('[data-template]').forEach((btn) => {
+  document.querySelectorAll('[data-template]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const template = btn.dataset.template;
-      const timeRange = document.getElementById('time-range-select')?.value || 'medium_term';
-      if (template === 'album') await renderAlbumPoster(timeRange);
-      else if (template === 'receipt') await renderReceiptPoster(timeRange);
-      else if (template === 'festival') await renderFestivalPoster(timeRange);
+      const t = btn.dataset.template;
+      const tr = document.getElementById('time-range-select')?.value||'medium_term';
+      if (t==='album')   openAlbumPicker();
+      if (t==='receipt') await renderReceiptPoster(tr);
+      if (t==='festival') await renderFestivalPoster(tr);
     });
   });
 
-  // Time range selector
-  document.getElementById('time-range-select')?.addEventListener('change', async (e) => {
-    const timeRange = e.target.value;
-    const activeTemplate = document.querySelector('[data-template].btn-active')?.dataset.template || 'album';
-    if (activeTemplate === 'album') await renderAlbumPoster(timeRange);
-    else if (activeTemplate === 'receipt') await renderReceiptPoster(timeRange);
-    else if (activeTemplate === 'festival') await renderFestivalPoster(timeRange);
+  document.getElementById('time-range-select')?.addEventListener('change', async e => {
+    const tr = e.target.value;
+    const active = document.querySelector('[data-template].btn-active')?.dataset.template||'album';
+    if (active==='album')   await renderAlbumPoster(tr);
+    if (active==='receipt') await renderReceiptPoster(tr);
+    if (active==='festival') await renderFestivalPoster(tr);
   });
 
-  // Export button
-  document.getElementById('export-btn')?.addEventListener('click', exportPoster);
+  document.getElementById('album-picker-close')?.addEventListener('click', closeAlbumPicker);
+  document.getElementById('album-picker-overlay')?.addEventListener('click', closeAlbumPicker);
 
-  // Save button
-  document.getElementById('save-btn')?.addEventListener('click', saveCurrentPoster);
+  let searchTimer;
+  document.getElementById('album-search-input')?.addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(()=>runAlbumSearch(e.target.value), 380);
+  });
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', bootstrap);

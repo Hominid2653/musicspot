@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Poster Studio</title>
+    <!-- Tailwind CSS -->
+    <script src="https://jsdelivr.net"></script>
+    <!-- External Graphic Libraries -->
+    <script src="https://cloudflare.com"></script>
+    <script src="https://cloudflare.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900 min-h-screen font-sans">
+
+    <div class="max-w-6xl mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        <!-- Left Column: Controls -->
+        <div class="space-y-6 bg-white p-6 rounded-xl shadow-sm h-fit">
+            <h1 class="text-2xl font-bold tracking-tight">Album Poster Engine</h1>
+            <button id="login-btn" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-4 rounded-lg transition">
+                Connect Spotify Account
+            </button>
+            
+            <div id="controls" class="hidden space-y-4">
+                <button id="fetch-top-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition">
+                    Load Top Album Template
+                </button>
+                <button id="download-btn" class="w-full bg-neutral-900 hover:bg-black text-white font-medium py-2 px-4 rounded-lg transition">
+                    Export High-Res Poster
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Column: Print Preview Canvas (Maintains A3 Aspect Ratio) -->
+        <div class="flex justify-center items-start">
+            <div id="poster-capture-area" class="bg-white w-[380px] h-[537px] shadow-2xl p-6 flex flex-col justify-between relative overflow-hidden box-border border border-gray-200">
+                
+                <!-- Album Artwork Section -->
+                <div class="w-full aspect-square bg-gray-200 overflow-hidden flex items-center justify-center">
+                    <img id="poster-art" crossOrigin="anonymous" src="https://placehold.co" class="w-full h-full object-cover hidden">
+                    <div id="art-fallback" class="text-gray-400 text-sm">No Artwork Loaded</div>
+                </div>
+
+                <!-- Bottom Layout Grid -->
+                <div class="grid grid-cols-2 gap-4 pt-4 mt-auto items-end">
+                    <!-- Left: Tracklist Output -->
+                    <div class="space-y-1">
+                        <ol id="poster-tracks" class="text-[7px] leading-tight font-bold uppercase text-gray-800 tracking-wide list-decimal pl-3 space-y-0.5">
+                            <li>Select an item to preview</li>
+                        </ol>
+                    </div>
+
+                    <!-- Right: Metadata & Branding Blocks -->
+                    <div class="text-right space-y-3 flex flex-col items-end">
+                        <!-- Color Swatches Grid -->
+                        <div id="palette-container" class="flex gap-1 justify-end h-3 w-24">
+                            <div class="w-full bg-gray-300"></div>
+                        </div>
+                        
+                        <div>
+                            <h2 id="poster-artist" class="text-xs font-black uppercase tracking-tighter leading-none text-neutral-900">Artist Name</h2>
+                            <h3 id="poster-album" class="text-[10px] font-bold uppercase tracking-tight text-neutral-700 mt-0.5">Album Title</h3>
+                        </div>
+
+                        <!-- Mini Footer Notes -->
+                        <div class="text-[5px] text-gray-500 font-mono tracking-tight leading-none text-right">
+                            <p id="poster-label">LABEL: PRODUCTION CO</p>
+                            <p id="poster-date" class="mt-0.5">RELEASED ON: MM DD, YYYY</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

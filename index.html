@@ -286,15 +286,18 @@
       width: 100%; aspect-ratio: 1; object-fit: cover; display: block;
       transition: opacity 0.12s;
     }
+    .album-picker-info,
     .album-picker-card-info {
       padding: 0.4rem 0.5rem 0.5rem;
       display: flex; flex-direction: column; gap: 2px;
     }
+    .picker-name,
     .album-picker-name {
       font-size: 0.58rem; font-weight: 600; letter-spacing: 0.04em;
       color: var(--text); display: block;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .picker-artist,
     .album-picker-artist {
       font-size: 0.52rem; color: var(--muted);
       display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -305,12 +308,15 @@
     ══════════════════════════════════════════════════════════════════════════ */
     .album-template { flex-direction: column; }
 
+    .alb-art-block,
     .alb-art-wrap {
       flex: 0 0 62%; position: relative; overflow: hidden;
     }
+    .alb-art-img,
     .alb-art {
       width: 100%; height: 100%; object-fit: cover; display: block;
     }
+    .alb-art-fade,
     .alb-art-overlay {
       position: absolute; inset: 0; pointer-events: none;
     }
@@ -324,9 +330,14 @@
       font-size: 0.33rem; letter-spacing: 0.22em;
       margin-bottom: 0.3rem; font-family: var(--f-mono);
     }
+    .alb-section-label {
+      font-size: 0.33rem; letter-spacing: 0.22em;
+      margin-bottom: 0.3rem; font-family: var(--f-mono);
+    }
 
     .alb-tracklist-cols { display: flex; gap: 0.4rem; }
     .alb-col { list-style: none; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+    .alb-track-row,
     .alb-col li {
       font-family: var(--f-mono); font-size: 0.38rem;
       letter-spacing: 0.04em; line-height: 1.45;
@@ -334,12 +345,21 @@
       display: flex; align-items: baseline; gap: 0.25rem;
       opacity: 0.55;
     }
+    .alb-track-row {
+      border-bottom: 1px solid;
+      justify-content: space-between;
+    }
+    .alb-tn { flex: 0 0 1.25rem; }
+    .alb-tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .alb-td { flex: 0 0 auto; }
     .trk-num { opacity: 0.5; flex-shrink: 0; }
 
+    .alb-identity,
     .alb-right {
       display: flex; flex-direction: column;
       align-items: flex-end; justify-content: flex-end; gap: 0.45rem;
     }
+    .alb-palette,
     .alb-swatches { display: flex; gap: 3px; }
     .alb-swatch { width: 12px; height: 12px; flex-shrink: 0; display: block; }
     .alb-artist {
@@ -365,6 +385,7 @@
       padding: 0; justify-content: center; align-items: center;
     }
 
+    .rcp-paper,
     .rcp-outer {
       width: 88%; margin: auto;
       display: flex; flex-direction: column;
@@ -404,6 +425,7 @@
     }
 
     .rcp-paper {
+      position: relative;
       background: #f5f0e6;
       /* Subtle thermal paper texture via noise-like gradient */
       background-image:
@@ -420,6 +442,26 @@
       font-family: var(--f-mono);
       /* Slight vertical stretch to simulate thermal print */
       letter-spacing: 0.01em;
+    }
+    .rcp-body {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+    .rcp-noise {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.35;
+      background-image: radial-gradient(rgba(0,0,0,0.08) 0.5px, transparent 0.5px);
+      background-size: 4px 4px;
+    }
+    .rcp-store-header { text-align: center; }
+    .rcp-logo-line {
+      text-align: center; font-size: 0.48rem; font-weight: 600;
+      letter-spacing: 0.16em; color: #222;
     }
 
     /* Faded horizontal scan lines for thermal feel */
@@ -442,6 +484,10 @@
     .rcp-store-sub {
       text-align: center; font-size: 0.48rem; letter-spacing: 0.15em; color: #555;
     }
+    .rcp-store-addr {
+      text-align: center; font-size: 0.38rem; letter-spacing: 0.12em; color: #777;
+      margin-top: 0.08rem;
+    }
     .rcp-dashed {
       text-align: center; font-size: 0.42rem; letter-spacing: 0.04em;
       color: #aaa; margin: 0.2rem 0;
@@ -456,6 +502,15 @@
       display: flex; justify-content: space-between;
       font-size: 0.42rem; letter-spacing: 0.06em; color: #444;
     }
+    .rcp-info-row,
+    .rcp-col-heads {
+      display: flex; justify-content: space-between;
+      font-size: 0.42rem; letter-spacing: 0.06em; color: #444;
+    }
+    .rcp-col-heads {
+      font-size: 0.4rem; font-weight: 600; letter-spacing: 0.1em;
+      color: #777;
+    }
     .rcp-col-header {
       display: flex; justify-content: space-between;
       font-size: 0.4rem; font-weight: 600; letter-spacing: 0.1em;
@@ -467,11 +522,26 @@
 
     .rcp-items { display: flex; flex-direction: column; gap: 0; }
 
+    .rcp-item,
     .rcp-row {
       display: flex; align-items: flex-start; justify-content: space-between;
       padding: 0.2rem 0;
       border-bottom: 1px dashed #ccc8bb;
       gap: 0.3rem;
+    }
+    .rcp-item {
+      flex-direction: column;
+    }
+    .rcp-item-head,
+    .rcp-item-sub {
+      width: 100%;
+      display: flex;
+      align-items: baseline;
+      gap: 0.3rem;
+    }
+    .rcp-item-sub { justify-content: space-between; }
+    .rcp-idx {
+      font-size: 0.38rem; color: #999; flex: 0 0 1rem;
     }
     .rcp-row-left { display: flex; gap: 0.3rem; flex: 1; overflow: hidden; align-items: flex-start; }
     .rcp-num { font-size: 0.38rem; color: #999; flex-shrink: 0; margin-top: 1px; }
@@ -485,6 +555,12 @@
       display: block; font-size: 0.37rem; color: #888;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .rcp-artist,
+    .rcp-pop {
+      font-size: 0.37rem; color: #888;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .rcp-artist { padding-left: 1.3rem; }
     .rcp-row-right { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 1px; }
     .rcp-dur  { font-size: 0.4rem; color: #555; }
     .rcp-plays { font-size: 0.38rem; color: #999; }
@@ -499,8 +575,18 @@
       text-align: center; font-size: 0.48rem; font-weight: 600;
       letter-spacing: 0.1em; margin: 0.25rem 0 0.1rem;
     }
+    .rcp-messages { text-align: center; }
+    .rcp-msg-main {
+      font-size: 0.48rem; font-weight: 600;
+      letter-spacing: 0.1em; color: #111;
+    }
+    .rcp-msg-sub {
+      font-size: 0.37rem; letter-spacing: 0.12em; color: #999;
+    }
     .rcp-tagline { text-align: center; font-size: 0.37rem; letter-spacing: 0.12em; color: #999; }
+    .rcp-barcode-block,
     .rcp-barcode-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; margin: 0.3rem 0 0.1rem; }
+    .rcp-barcode-svg { width: 100%; height: 32px; display: block; }
     .rcp-barcode-num { font-size: 0.35rem; letter-spacing: 0.08em; color: #888; }
     .rcp-powered { text-align: center; font-size: 0.33rem; letter-spacing: 0.15em; color: #bbb; }
 

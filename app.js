@@ -517,6 +517,7 @@ function attachEventListeners() {
 
   document.getElementById('album-picker-close')?.addEventListener('click', closeAlbumPicker);
   document.getElementById('album-picker-overlay')?.addEventListener('click', closeAlbumPicker);
+  document.getElementById('album-picker-panel')?.addEventListener('click', e => e.stopPropagation());
 
   let searchTimer;
   document.getElementById('album-search-input')?.addEventListener('input', e => {
